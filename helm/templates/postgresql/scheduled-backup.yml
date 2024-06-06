@@ -1,0 +1,11 @@
+{{ if eq .Values.cnpg.state "primary" -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: backup-app
+spec:
+  schedule: "{{ .Values.cnpg.scheduledBackup.schedule }}"
+  backupOwnerReference: self
+  cluster:
+    name: {{ .Values.cnpg.fullname | quote }}
+{{- end }}

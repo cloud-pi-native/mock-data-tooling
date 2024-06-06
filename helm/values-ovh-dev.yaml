@@ -1,0 +1,182 @@
+environment: &environment ovh
+phase: &phase dev
+
+pgrest:
+  ingress:
+    enabled: true
+
+    hosts:
+      - host: pgrest-mockdatatooling.dev.numerique-interieur.com
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+
+  ingressAdmin:
+    enabled: true
+
+    hosts:
+      - host: pgrest-admin-mockdatatooling.dev.numerique-interieur.com
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  
+  configFromSecret: pgrest-config
+  configFromConfigMap: pgrest-config
+
+pgadmin4:
+  enabled: true
+  ingress:
+    enabled: true
+    hosts:
+      - host: pgadmin-mockdatatooling.dev.numerique-interieur.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+swagger:
+  ingress:
+    enabled: true
+    hosts:
+      - host: swagger-mockdatatooling.dev.numerique-interieur.com
+        paths:
+          - path: /
+            pathType: Prefix
+  config:
+  - url: "https://pgrest-mockdatatooling.dev.numerique-interieur.com"
+    name: "mockdatatooling"
+
+database:
+  dump:
+    enabled: true
+    endpointURL: "http://minio:9000"
+    destinationPath: "s3://database"
+    retentionPolicy: "30d"
+    awsCredentialsSecret: aws-creds
+
+vector:
+  enabled: true
+  extraVolumes:
+  - name: aws-creds
+    secret:
+      secretName: aws-log-archive
+  extraVolumeMounts:
+  - name: aws-creds
+    mountPath: /var/aws/
+  customConfig:
+    sources:
+      http_server:
+        type: http_server
+        address: 0.0.0.0:8080
+    transforms:
+      remap:
+        type: remap
+        inputs:
+          - http_server
+        source: >-
+          . =  parse_json!(.message)
+      parse_pgrest_log:
+        type: remap
+        inputs:
+          - remap
+        source: >-
+          component, err = string(.kubernetes.labels.component)
+
+          if err != null {
+            abort
+          }
+
+          if !contains(component, "pgrest") {
+              abort
+          }
+
+          . = parse_apache_log!(.message, "combined")
+      pgrest_log_to_metrics:
+        type: log_to_metric
+        inputs:
+          - parse_pgrest_log
+        metrics:
+          - type: counter
+            field: user
+            name: response_total
+            namespace: tcnp
+            tags:
+              user: "{{ `{{user}}` }}"
+    sinks:
+      prom_exporter:
+        inputs:
+          - internal_metrics
+          - pgrest_log_to_metrics
+      aws_s3_out:
+        type: "aws_s3"
+        tls: 
+          verify_certificate: false
+        inputs:
+        - http_server
+        endpoint: "http://minio.mockdatatooling.dev.numerique-interieur.com"
+        bucket: "logs"
+        region: "fr-par"
+        auth:
+          credentials_file: /var/aws/credentials
+        compression: "gzip"
+        encoding:
+          codec: "raw_message"
+        key_prefix: "logs/%Y/%m/%d/"
+        buffer: 
+          type: disk
+          max_size: 268435488
+        batch:
+          max_bytes: 104857600  # 100 Mo en octets
+          timeout_secs: 300 # 3min
+        tags:
+          Project: mockdatatooling
+          Environment: *environment
+          Phase: *phase
+      vlogs:
+        inputs:
+          - remap
+        type: "elasticsearch"
+        endpoints: [ "http://vlogs:9428/insert/elasticsearch/" ]
+        mode: "bulk"
+        api_version: "v8"
+        healthcheck:
+          enabled: false
+        query:
+          _msg_field: "message"
+          _time_field: "@timestamp"
+          _stream_fields: "kubernetes.namespace_name,kubernetes.container_name"
+
+victoria-logs-single:
+  enabled: true
+  server:
+    fullnameOverride: vlogs
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        cpu: 50m
+        memory: 100Mi
+    image:
+      repository: "docker.io/victoriametrics/victoria-logs"
+    persistentVolume:
+      enabled: true
+      size: 30Gi
+    serviceMonitor:
+      enabled: true
+    ingress:
+      enabled: true
+      hosts: 
+      - name: vlogs-mockdatatooling.dev.numerique-interieur.com
+        path: /
+        port: http
+
+haproxy:
+  ingress:
+    enabled: true
+    hostname: haproxy-mockdatatooling.dev.numerique-interieur.com
+
+dataloader:
+  image:
+    registry: harbor.apps.c6.numerique-interieur.com
+    repository: mi-mockdatatooling/dataloader
+    tag: 1.0

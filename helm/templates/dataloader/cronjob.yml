@@ -1,0 +1,59 @@
+{{- if .Values.dataloader.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dataloader
+spec:
+  schedule: "0 5 31 2 *" #Set an incoherent date eg the job never starts (31/02), manual launch only
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: {{ .Values.dataloader.ttlSecondsAfterFinished | default 3600 }}
+      template:
+        metadata:
+        spec:
+          imagePullSecrets:
+            - name: "registry-pull-secret"
+          containers:
+            - name: dataloader
+              image: "{{ .Values.dataloader.image.registry }}/{{ .Values.dataloader.image.repository }}:{{ .Values.dataloader.image.tag }}"
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "250m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "250m"
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: dataloader-script
+                  mountPath: /scripts
+              command:
+              - /bin/sh
+              - "/scripts/dataloader.sh"
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: "{{ .Values.dataloader.userSecret }}"
+                      key: password
+              envFrom:
+              - secretRef:
+                  name: old-data-aws-creds
+              readinessProbe:
+                exec:
+                  command:
+                    - cat
+                    - /scripts/dataloader.sh
+          volumes:
+            - name: dataloader-script
+              configMap:
+                defaultMode: 0770
+                name: dataloader-script
+            - name: data
+              emptyDir: {}
+          restartPolicy: Never
+{{ end }}

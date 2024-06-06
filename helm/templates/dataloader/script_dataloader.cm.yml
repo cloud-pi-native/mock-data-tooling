@@ -1,0 +1,9 @@
+{{- if .Values.dataloader.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dataloader-script
+
+data:
+{{ (tpl (.Files.Glob "conf/dataloader/dataloader.sh").AsConfig .) | indent 2 }}
+{{ end }}

@@ -1,0 +1,7 @@
+# Fichier permettant de gérer un cluster cnpg en primary
+
+
+cnpg:
+  state: "primary"
+  scheduledBackup:
+    schedule: "0 0 * * * *"

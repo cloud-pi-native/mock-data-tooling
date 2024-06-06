@@ -1,0 +1,46 @@
+{{ if eq .Values.cnpg.state "replica" -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.cnpg.fullname }}
+  labels:
+    {{- include "..labels-cnpg" . | nindent 4 }}
+spec:
+  startDelay: 300
+  instances: 1
+
+  storage:
+    size: 8Gi
+  {{- if .Values.cnpg.resources }}
+  resources:
+    {{- .Values.cnpg.resources | toYaml | nindent 4 }}
+  {{- end }}
+  bootstrap:
+    recovery:
+      source: cnpg-app
+
+  replica:
+    enabled: true
+    source: cnpg-app
+  
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: cnpg-superuser
+
+  externalClusters:
+  # Attention, le nom est important, il sera utilisé pour compléter le chemin dans le bucket S3:
+  # exemple: s3://database/cnpg-app
+  - name: cnpg-app
+    barmanObjectStore:
+      destinationPath: {{ .Values.cnpg.dump.destinationPath | quote }}
+      endpointURL: {{ .Values.cnpg.dump.endpointURL | quote }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .Values.cnpg.dump.awsCredentialsSecret | quote }}
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: {{ .Values.cnpg.dump.awsCredentialsSecret | quote }}
+          key: ACCESS_SECRET_KEY
+  monitoring:
+    enablePodMonitor: true
+{{- end }}
