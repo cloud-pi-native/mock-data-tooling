@@ -70,6 +70,21 @@ Si aucun token n'est soumis dans les headers, le role choisi par PGRest sera le 
 Pour configurer pgrest, il est possible de passer par la configmap pgrest-config, ainsi que par le secret du même nom.
 Ces 2 objets seront montés en tant que variables d'environnement.
 
+#### Token JWT
+
+Point d'attention sur les tokens JWT.
+
+Il y aura besoin d'au moins 2 tokens JWT:
+
+- un entre le client et haproxy (nommé token haproxy dans le bloc après)
+- un entre haproxy et pgrest (nommé token pgrest dans le bloc après)
+
+Quand haproxy reçoit et valide le token haproxy (contenant la clé `org`), il dispatche la requête selon sa configuration dans un backend particulier.
+
+Ce token est ensuite réécrit (header `Authorization: Bearer ...`) pour substituer le token pgrest (contenant la clé `role`) au token haproxy.
+
+De ce fait, PGRest n'a pas idée du token entre le client et haproxy et le client n'a pas en sa possession le token permettant de parler directement à PGRest.
+
 ### CNPG
 
 CloudPGNative est utilisé pour gérer le cluster de postgresql.
@@ -133,7 +148,7 @@ Chaque élément est composé d'une clé sous la forme `<environnement>:<phase>`
 
 Si jamais vous avez besoin d'une clé particulière (pour les cluster dédié notamment), demander à la Service Team.
 
-### Swagger
+### Swagger
 
 PGRest génère une configuration OpenAPI disponible via le swagger intégré dans ce chart.
 
@@ -141,11 +156,9 @@ PGRest génère une configuration OpenAPI disponible via le swagger intégré da
 
 Il faut se poser la question des rôles à créer au niveau de la base de données (minimum 3: le rôle anon et un rôle autorisé à faire les opérations nécessaires, ainsi qu'un rôle qui aura le droit de login - aka un utilisateur).
 
-Vu qu'il est aussi possible de dispatcher les différents clients via la configuration haproxy, il faut aussi se poser la question 
-
 ## Misc
 
-### Ajouter un environnement
+### Ajouter un environnement
 
 - créer le fichier values correspondant à l'environnement, en définissant les variables **environment** et **phase**. Ces variables serviront pour retrouver des fichiers via une arborescence particulière.
 - créer une clé asymétrique, stocker la partie privée dans un lieu sécurisé, la partie publique ira dans le dossier `conf/haproxy/<env>/<phase>/public.pem
