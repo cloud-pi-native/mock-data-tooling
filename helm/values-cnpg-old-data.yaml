@@ -1,0 +1,19 @@
+## Gestion de la base de données temporaire pour la reprise des données
+
+cnpgOldData:
+  enabled: true
+  fullname: cnpg-old-data
+  storageSize: 50Gi
+  resources:
+    requests:
+      memory: 2048Mi
+      cpu: 1
+    limits:
+      memory: 2048Mi
+      cpu: 1
+
+dataloader:
+  enabled: true
+  bucket: dump-rna
+  endpoint: http://minio:9000
+  file: waldec.dmp

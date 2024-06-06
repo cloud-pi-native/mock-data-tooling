@@ -1,0 +1,225 @@
+environment: achanger
+phase: achanger
+
+# Utilisé par les images bitnami pour adapter les paramètres securityContext à openshift
+global:
+  compatibility:
+    openshift:
+      adaptSecurityContext: auto
+
+dataloader:
+  enabled: false
+  ttlSecondsAfterFinished: 3600
+  userSecret: cnpg-old-data-superuser
+
+pgrest:
+  anonRole: anon
+  dbPool: 30
+  dbMaxRows: 300
+  loglevel: "info" # "crit", "error", "warn", "info"
+
+  fullnameOverride: "pgrest"
+
+  commonLabels:
+    component: pgrest
+
+  service:
+    type: ClusterIP
+    port: &pgrestapiport 3000
+
+  serviceAdmin:
+    type: ClusterIP
+    port: &pgrestadminport 3001
+
+  livenessProbe:
+    httpGet:
+      path: /live
+      port: *pgrestadminport
+    failureThreshold: 2
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: *pgrestadminport
+    initialDelaySeconds: 15
+    timeoutSeconds: 1
+  startupProbe:
+    httpGet:
+      path: /ready
+      port: *pgrestadminport
+    failureThreshold: 30
+    periodSeconds: 10
+
+  ingress:
+    enabled: false
+  ingressAdmin:
+    enabled: false
+
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  
+  configFromSecret: pgrest-config
+  configFromConfigMap: pgrest-config
+
+cnpg:
+  fullname: cnpg-app
+  initdb:
+    username: "app-root"
+    database: "app"
+  auth:
+    existingSecret: cnpg-app-root
+  instances: 1
+  storageSize: 55Gi
+  resources:
+    requests:
+      memory: 2048Mi
+      cpu: 1
+    limits:
+      memory: 2048Mi
+      cpu: 1
+  dump:
+    enabled: false
+  
+
+pgadmin4:
+  enabled: true
+  fullnameOverride: pgadmin
+  image:
+    repository: bnoleau/pgadmin-rootless
+    tag: "8.6"
+  commonLabels:
+    app: mockdatatooling
+    tier: front
+  strategy:
+    type: Recreate
+  networkPolicy:
+    enabled: false
+  existingSecret: pgadmin
+  secretKeys:
+    pgadminPasswordKey: PGADMIN_SETUP_PASSWORD
+  envVarsFromConfigMaps:
+    - pgadmin
+  envVarsFromSecrets:
+    - pgadmin
+  containerPorts:
+    http: 5050
+  service:
+    type: ClusterIP
+    port: 5050
+    targetPort: 5050
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "250m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+  VolumePermissions:
+    enabled: false
+  init:
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "250m"
+  securityContext: ""
+  containerSecurityContext:
+    enabled: false
+  podSecurityContext:
+    enabled: false
+
+swagger:
+  enabled: true
+  fullnameOverride: swagger
+  commonLabels:
+    component: swagger
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "100m"
+    limits:
+      memory: "64Mi"
+      cpu: "100m"
+
+vector:
+  enabled: false
+  commonLabels:
+    app: mockdatatooling
+    tier: logs
+    component: vector
+  podLabels:
+    app: mockdatatooling
+    tier: logs
+    component: vector
+  podMonitor:
+    enabled: true
+  fullnameOverride: vector
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 200Mi
+    limits:
+      cpu: 100m
+      memory:  200Mi
+  customConfig:
+    data_dir: /vector-data-dir
+    api:
+      enabled: true
+      address: 127.0.0.1:8686
+      playground: false
+    sources:
+      internal_metrics:
+        type: internal_metrics
+    sinks:
+      prom_exporter:
+        type: prometheus_exporter
+        flush_period_secs: 3600
+        inputs: [internal_metrics]
+        address: 0.0.0.0:9090
+
+haproxy:
+  fullnameOverride: haproxy
+  existingConfigmap: haproxy-cfg
+  podAnnotations:
+    "checksum/configmap": '{{ (tpl (.Files.Glob "conf/haproxy/haproxy.cfg").AsConfig .) | sha256sum }}'
+  extraVolumes:
+  - name: haproxy-keys
+    configMap:
+      name: haproxy-keys
+  extraVolumeMounts:
+  - name: haproxy-keys
+    mountPath: /keys/
+  extraEnvVarsSecret: pgrest-token
+  service:
+    type: ClusterIP
+    ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http
+  ingress:
+    enabled: false
+
+cnpgOldData:
+  enabled: false

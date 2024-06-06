@@ -1,0 +1,10 @@
+{{- $pgadmin_email := (.Values.pgadmin4.env | default dict).email | default "chart@domain.com" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgadmin
+  labels:
+    {{- include "..labels" . | nindent 4 }}
+    component: pgadmin
+data:
+    PGADMIN_SETUP_EMAIL: {{ $pgadmin_email }}

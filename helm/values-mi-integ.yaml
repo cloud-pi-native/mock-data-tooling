@@ -1,0 +1,149 @@
+environment: &environnement mi
+phase: &phase integ
+
+pgrest:
+  ingress:
+    enabled: true
+    hosts:
+      - host: api-dev.d290.dev.forge.minint.fr
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+
+  ingressAdmin:
+    enabled: true
+    hosts:
+      - host: api-admin-dev.d290.dev.forge.minint.fr
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  
+  configFromSecret: pgrest-config
+  configFromConfigMap: pgrest-config
+
+pgadmin4:
+  enabled: true
+  ingress:
+    enabled: true
+    hosts:
+      - host: pgadmin-dev.d290.dev.forge.minint.fr
+        paths:
+          - path: /
+            pathType: Prefix
+
+swagger:
+  ingress:
+    enabled: true
+    hosts:
+      - host: swagger-dev.d290.dev.forge.minint.fr
+        paths:
+          - path: /
+            pathType: Prefix
+  config:
+  - url: "https://api-admin-dev.d290.dev.forge.minint.fr"
+    name: "mockdatatooling"
+
+vector:
+  enabled: true
+  customConfig:
+    sources:
+      http_server:
+        type: http_server
+        address: 0.0.0.0:8080
+    transforms:
+      remap:
+        type: remap
+        inputs:
+          - http_server
+        source: >-
+          . =  parse_json!(.message)
+      parse_pgrest_log:
+        type: remap
+        inputs:
+          - remap
+        source: >-
+          component, err = string(.kubernetes.labels.component)
+
+          if err != null {
+            abort
+          }
+
+          if !contains(component, "pgrest") {
+              abort
+          }
+
+          . = parse_apache_log!(.message, "combined")
+      pgrest_log_to_metrics:
+        type: log_to_metric
+        inputs:
+          - parse_pgrest_log
+        metrics:
+          - type: counter
+            field: user
+            name: response_total
+            namespace: tcnp
+            tags:
+              user: "{{ `{{user}}` }}"
+    sinks:
+      prom_exporter:
+        inputs:
+          - internal_metrics
+          - pgrest_log_to_metrics
+      vlogs:
+        inputs:
+          - remap
+        type: "elasticsearch"
+        endpoints: [ "http://vlogs:9428/insert/elasticsearch/" ]
+        mode: "bulk"
+        api_version: "v8"
+        healthcheck:
+          enabled: false
+        query:
+          _msg_field: "message"
+          _time_field: "@timestamp"
+          _stream_fields: "kubernetes.namespace_name,kubernetes.container_name"
+
+victoria-logs-single:
+  enabled: true
+  server:
+    fullnameOverride: vlogs
+    retentionPeriod: 30
+    resources:
+      requests:
+        cpu: 512m
+        memory: 512Mi
+      limits:
+        cpu: 1
+        memory: 1024Mi
+    image:
+      repository: "docker.io/victoriametrics/victoria-logs"
+    persistentVolume:
+      enabled: true
+      size: 30Gi
+    serviceMonitor:
+      enabled: true
+    ingress:
+      enabled: true
+      hosts: 
+      - name: vlogs-dev.d290.dev.forge.minint.fr
+        path: /
+        port: http
+
+cloudpgnative:
+  state: "primary"
+
+database:
+  dump:
+    enabled: false
+
+haproxy:
+  ingress:
+    enabled: true
+    hostname: haproxy-dev.d290.dev.forge.minint.fr

@@ -1,0 +1,21 @@
+dependencies:
+- name: pgadmin4
+  repository: https://helm.runix.net
+  version: 1.24.0
+- name: swagger
+  repository: https://baboulinet-33.github.io/helm-charts/
+  version: 0.1.0
+- name: pgrest
+  repository: https://baboulinet-33.github.io/helm-charts/
+  version: 0.1.0
+- name: haproxy
+  repository: https://charts.bitnami.com/bitnami
+  version: 1.1.2
+- name: vector
+  repository: https://helm.vector.dev
+  version: 0.31.1
+- name: victoria-logs-single
+  repository: https://victoriametrics.github.io/helm-charts/
+  version: 0.3.8
+digest: sha256:e42777e877379aaf8e9184ebfb5e61b84fd0279b1059819af56f57dc9b45e0de
+generated: "2024-05-30T11:20:00.489625788+02:00"

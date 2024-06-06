@@ -1,0 +1,70 @@
+{{ if eq .Values.cnpg.state "primary" -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.cnpg.fullname }}
+  labels:
+    {{- include "..labels-cnpg" . | nindent 4 }}
+spec:
+  startDelay: 300
+  instances: {{ .Values.cnpg.instances | default 3 }}
+
+  storage:
+    size: {{ .Values.cnpg.storageSize | default "8Gi" | quote }}
+  {{- if .Values.cnpg.resources }}
+  resources:
+    {{- .Values.cnpg.resources | toYaml | nindent 4 }}
+  {{- end }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.cnpg.initdb.database }}
+      owner: {{ .Values.cnpg.initdb.username }}
+      secret:
+        name: {{ .Values.cnpg.auth.existingSecret }}
+  
+  managed:
+    roles:
+    - name: {{ .Values.pgrest.anonRole }}
+      ensure: present
+      login: false
+    - name: roleA
+      ensure: present
+      login: false
+    - name: {{ .Values.cnpg.initdb.username }}
+      ensure: present
+      login: true
+      createdb: true
+      createrole: true
+      inRoles:
+      - {{ .Values.pgrest.anonRole }}
+      - roleA
+
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: cnpg-superuser
+
+  {{- if .Values.cnpg.dump.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: {{ .Values.cnpg.dump.destinationPath | quote }}
+      endpointURL: {{ .Values.cnpg.dump.endpointURL | quote }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .Values.cnpg.dump.awsCredentialsSecret | quote }}
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: {{ .Values.cnpg.dump.awsCredentialsSecret | quote }}
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+        maxParallel: 8
+      data:
+        compression: gzip
+        immediateCheckpoint: false
+        jobs: 2
+    retentionPolicy: {{ .Values.cnpg.dump.retentionPolicy | quote }}
+  {{- end }}
+    
+  monitoring:
+    enablePodMonitor: true
+{{- end }}

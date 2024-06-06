@@ -1,0 +1,5 @@
+# Fichier permettant de gérer un cluster cnpg en replica
+
+
+cnpg:
+  state: "replica"
